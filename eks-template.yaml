@@ -157,7 +157,7 @@ Parameters:
   SubnetB:
     Description: The subnet where workers can be created and kubernetes will be available
     Type: String
-    Default: subnet-6924fa56
+    Default: subnet-7f3e2325
 
 
 
