@@ -149,15 +149,15 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Default: vpc-8b25eef3
 
-  Subnets:
-    Description: The subnets where workers can be created.
-    Type: List<AWS::EC2::Subnet::Id>
-    Default: [ subnet-224e9569, subnet-224e9569 ]
+  SubnetA:
+    Description: The subnet where workers can be created and kubernetes will be available.
+    Type: String
+    Default: subnet-224e9569
 
-  EksClusterSubnets:
-    Description: List of EKS Subnets
-    Type: List<String>
-    Default: [ subnet-224e9569, subnet-224e9569 ]
+  SubnetB:
+    Description: The subnet where workers can be created and kubernetes will be available
+    Type: String
+    Default: subnet-6924fa56
 
 
 
@@ -311,7 +311,9 @@ Resources:
     Properties :
       Name: !Ref ClusterName
       ResourcesVpcConfig:
-        SubnetIds: !Ref EksClusterSubnets
+        SubnetIds:
+          - !Ref SubnetA
+          - !Ref SubnetB
       RoleArn: !Ref EksClusterRole
 
   ###
@@ -328,7 +330,9 @@ Resources:
       LaunchConfigurationName: !Ref NodeLaunchConfig
       MinSize: !Ref NodeAutoScalingGroupMinSize
       MaxSize: !Ref NodeAutoScalingGroupMaxSize
-      VPCZoneIdentifier: !Ref Subnets
+      VPCZoneIdentifier:
+        - !Ref SubnetA
+        - !Ref SubnetB
       Tags:
         - Key: Name
           Value: !Sub ${ClusterName}-${NodeGroupName}-Node
