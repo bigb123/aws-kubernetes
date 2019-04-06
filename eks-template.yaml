@@ -21,10 +21,10 @@ Description: >
 ##############################
 
 Resources:
-  GithubOAuthTokenSecret:
+  GithubOAuthTokenSecret2:
     Type: "AWS::SecretsManager::Secret"
     Properties:
-      Name: GithubOAuthTokenSecret
+      Name: GithubOAuthTokenSecret2
       Description: OAuth token that grants access to Github repositories.
       SecretString: !Sub '{
           "Token": "secrettoken"
