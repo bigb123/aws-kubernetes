@@ -182,7 +182,7 @@ Resources:
       Roles:
         - !Ref NodeInstanceRole
 
-  NodeInstancePolicy:
+  EcsClusterPolicy:
     Type: AWS::IAM::Policy
     Properties:
       Description: Additional access to resources for Nodes.
@@ -194,7 +194,7 @@ Resources:
             Action: ec2:DescribeImages
             Resource: "*"
       Roles:
-        - !Ref NodeInstanceRole
+        - !Ref EksClusterRole
 
   NodeInstanceRole:
     Type: AWS::IAM::Role
