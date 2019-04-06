@@ -189,6 +189,7 @@ Resources:
             Resource: "*"
       Roles:
         - !Ref NodeInstanceRole
+        - !Ref EksClusterRole
 
   NodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile
