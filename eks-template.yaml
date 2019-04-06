@@ -1,0 +1,46 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Template with basic EKS infrastructure.
+
+##############################
+#
+# Parameters
+#
+##############################
+
+# Parameters:
+
+
+
+
+##############################
+#
+# Resources
+#
+##############################
+
+Resources:
+  GithubOAuthTokenSecret:
+    Type: "AWS::SecretsManager::Secret"
+    Properties:
+      Name: GithubOAuthTokenSecret
+      Description: OAuth token that grants access to Github repositories.
+      SecretString: !Sub '{
+          "Token": "secrettoken"
+        }'
+
+
+##############################
+#
+# Outputs
+#
+##############################
+
+# Outputs:
+#   GithubOAuthTokenSecretARN:
+#     Description: >
+#       ARN of the secret in Secrets Manager storage that holds Github OAuth token.
+#     Value: !Ref GithubOAuthTokenSecret
+#     Export:
+#       Name: export-secrets-manager-github-oauth-token-arn
