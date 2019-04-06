@@ -175,17 +175,11 @@ Resources:
   #
   ###
 
-  NodeInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: "/"
-      Roles:
-        - !Ref NodeInstanceRole
-
-  NodeInstancePolicy:
+  # Policy that is being used with ec2 images.
+  CloudformatonDeploymentAdditionalPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      Description: Additional access to resources for Nodes.
+      PolicyName: CloudformatonDeploymentAdditionalPolicy
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -193,6 +187,13 @@ Resources:
             Effect: Allow
             Action: ec2:DescribeImages
             Resource: "*"
+      Roles:
+        - !Ref NodeInstanceRole
+
+  NodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
       Roles:
         - !Ref NodeInstanceRole
 
@@ -211,7 +212,6 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
 
   EksClusterRole:
     Type: AWS::IAM::Role
