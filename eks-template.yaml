@@ -24,10 +24,9 @@ Parameters:
   NodeInstanceType:
     Description: EC2 instance type for the node instances
     Type: String
-    Default: t2.small
+    Default: t2.medium
     ConstraintDescription: Must be a valid EC2 instance type
     AllowedValues:
-      - t2.small
       - t2.medium
       - t2.large
       - t2.xlarge
@@ -112,7 +111,7 @@ Parameters:
   NodeAutoScalingGroupMinSize:
     Description: Minimum size of Node Group ASG.
     Type: Number
-    Default: 1
+    Default: 0
 
   NodeAutoScalingGroupMaxSize:
     Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
@@ -130,7 +129,7 @@ Parameters:
     Default: 20
 
   ClusterName:
-    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+    Description: EKS cluster name.
     Type: String
     Default: eks-cluster
 
@@ -143,21 +142,6 @@ Parameters:
     Description: Unique identifier for the Node Group.
     Type: String
     Default: node-group
-
-  VpcId:
-    Description: The VPC of the worker instances
-    Type: AWS::EC2::VPC::Id
-    Default: vpc-8b25eef3
-
-  SubnetA:
-    Description: The subnet where workers can be created and kubernetes will be available.
-    Type: String
-    Default: subnet-224e9569
-
-  SubnetB:
-    Description: The subnet where workers can be created and kubernetes will be available
-    Type: String
-    Default: subnet-7f3e2325
 
 
 
@@ -175,21 +159,6 @@ Resources:
   #
   ###
 
-  # Policy that is being used with ec2 images.
-  # CloudformatonDeploymentAdditionalPolicy:
-  #   Type: AWS::IAM::Policy
-  #   Properties:
-  #     PolicyName: CloudformatonDeploymentAdditionalPolicy
-  #     PolicyDocument:
-  #       Version: '2012-10-17'
-  #       Statement:
-  #         -
-  #           Effect: Allow
-  #           Action: ec2:DescribeImages
-  #           Resource: "*"
-  #     Roles:
-  #       - !Ref NodeInstanceRole
-  #       - !Ref EksClusterRole
 
   NodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -230,22 +199,42 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
 
   ###
+  # User that can manipulate Kubernetes via cli
+  ###
+  EKSAccessUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: eks-access
+      Policies:
+        -
+          PolicyName: Switch_to_EKS_cluster_master_policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              Effect: Allow
+              Action: sts:AssumeRole
+              Resource: !ImportValue stack-deployment-role
+
+  ###
   #
   # Security groups
   #
   ###
 
+  ###
+  # EKS
+  ###
   ClusterControlPlaneSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Cluster communication with worker nodes
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
 
   NodeSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for all nodes in the cluster
-      VpcId: !Ref VpcId
+      VpcId: !Ref Vpc
       Tags:
         - Key: !Sub kubernetes.io/cluster/${ClusterName}
           Value: owned
@@ -319,6 +308,230 @@ Resources:
 
   ###
   #
+  # VPC
+  #
+  ###
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.16.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        -
+          Key: Name
+          Value: Private vpc for Kubernetes
+
+  ###
+  # Public subnets
+  ###
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock: 172.16.4.0/22
+      VpcId: !Ref Vpc
+      Tags:
+        -
+          Key: Name
+          Value: PublicSubnetA
+        -
+          Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: shared
+
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1b
+      CidrBlock: 172.16.8.0/22
+      VpcId: !Ref Vpc
+      Tags:
+        -
+          Key: Name
+          Value: PublicSubnetB
+        -
+          Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: shared
+
+  ###
+  # Private subnets
+  ###
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock: 172.16.104.0/22
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        -
+          Key: Name
+          Value: PrivateSubnetA
+        -
+          Key: kubernetes.io/role/internal-elb
+          Value: 1
+        -
+          Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: shared
+
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1b
+      CidrBlock: 172.16.108.0/22
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        -
+          Key: Name
+          Value: PrivateSubnetB
+        -
+          Key: kubernetes.io/role/internal-elb
+          Value: 1
+        -
+          Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: shared
+
+  ###
+  # Internet gateway
+  ###
+  IntergetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: KubernetesInternetGateway
+
+  AttachGatewayToVpc:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref IntergetGateway
+      VpcId: !Ref Vpc
+
+
+  ###
+  # Route tables
+  ###
+
+  # Public
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  PublicRoute:
+    DependsOn:
+      - IntergetGateway
+      - AttachGatewayToVpc
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IntergetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicRouteTableToPublicSubnetAAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  PublicRouteTableToPublicSubnetBAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetB
+
+
+  # Private A
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTableA
+
+  PrivateRouteA:
+    DependsOn: NatSubnetA
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatSubnetA
+      RouteTableId: !Ref PrivateRouteTableA
+
+  PrivateRouteTableAToPrivateSubnetAAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      SubnetId: !Ref PrivateSubnetA
+
+  # Private B
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTableB
+
+  PrivateRouteB:
+    DependsOn: NatSubnetB
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatSubnetB
+      RouteTableId: !Ref PrivateRouteTableB
+
+  PrivateRouteTableBToPrivateSubnetBAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref PrivateSubnetB
+
+  ###
+  # NATs
+  ###
+  ElasticIpA:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  ElasticIpB:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatSubnetA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIpA.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        -
+          Key: Name
+          Value: NatPrivateSubnetA
+
+  NatSubnetB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIpB.AllocationId
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+        -
+          Key: Name
+          Value: NatPrivateSubnetB
+
+
+
+  ###
+  #
   # EKS Cluster
   #
   ###
@@ -329,8 +542,10 @@ Resources:
       Name: !Ref ClusterName
       ResourcesVpcConfig:
         SubnetIds:
-          - !Ref SubnetA
-          - !Ref SubnetB
+          - !Ref PublicSubnetA
+          - !Ref PublicSubnetB
+        SecurityGroupIds:
+          - !Ref ClusterControlPlaneSecurityGroup
       RoleArn: !GetAtt EksClusterRole.Arn
 
   ###
@@ -348,8 +563,8 @@ Resources:
       MinSize: !Ref NodeAutoScalingGroupMinSize
       MaxSize: !Ref NodeAutoScalingGroupMaxSize
       VPCZoneIdentifier:
-        - !Ref SubnetA
-        - !Ref SubnetB
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
       Tags:
         - Key: Name
           Value: !Sub ${ClusterName}-${NodeGroupName}-Node
@@ -361,13 +576,12 @@ Resources:
       AutoScalingRollingUpdate:
         MaxBatchSize: 1
         MinInstancesInService: !Ref NodeAutoScalingGroupDesiredCapacity
-        PauseTime: PT5M
 
   NodeLaunchConfig:
     DependsOn: EksCluster
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      AssociatePublicIpAddress: true
+      AssociatePublicIpAddress: false
       IamInstanceProfile: !Ref NodeInstanceProfile
       ImageId: !Ref NodeImageId
       InstanceType: !Ref NodeInstanceType
@@ -397,3 +611,14 @@ Resources:
 # Outputs
 #
 ##############################
+
+Outputs:
+  DeploymentRole:
+    Description: >
+      ARN of the user that will be able to administer EKS.
+    Value: !GetAtt EKSAccessUser.Arn
+
+  InstanceProfileARN:
+    Description: >
+      Arn of the profile attached to node instances.
+    Value: !GetAtt NodeInstanceRole.Arn
