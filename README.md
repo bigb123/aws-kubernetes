@@ -42,7 +42,7 @@ Next thing you have to do is to make sure you have CLI access to your AWS
 account using this user. You can obtain CLI credentials using IAM web console.
 
 Next, edit $HOME/.aws/config by adding profile that will be used with kubectl
-commands.It can looks like the one below:
+commands. It can looks like the one below:
 
 ```
 [default]
